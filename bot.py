@@ -1,47 +1,70 @@
-import os
 import discord
 import openai
+import asyncio
 from discord.ext import commands
-from dotenv import load_dotenv
 
-# .envファイルを読み込む
-load_dotenv()
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# OpenAI APIキー（環境変数から取得することを推奨）
+openai.api_key = "your_openai_api_key"
 
-# OpenAI APIのセットアップ（新しいクライアントを使用）
-client_openai = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-# Discord Botのセットアップ
+# Botの設定
 intents = discord.Intents.default()
-intents.message_content = True  # メッセージの内容を取得できるようにする
+intents.messages = True
+intents.message_content = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Botが起動したときの処理
+# 会話履歴の保存用（ユーザーごとに管理）
+conversation_history = {}
+
+# 会話履歴の保持時間（秒）
+HISTORY_EXPIRATION = 300  # 5分間
+
+async def manage_history(user_id):
+    """一定時間後に会話履歴を削除"""
+    await asyncio.sleep(HISTORY_EXPIRATION)
+    if user_id in conversation_history:
+        del conversation_history[user_id]
+
 @bot.event
 async def on_ready():
     print(f"ログインしました: {bot.user}")
 
-# メッセージを受け取ったときの処理
 @bot.event
 async def on_message(message):
-    # Bot自身のメッセージは無視する
-    if message.author == bot.user:
-        return
+    if message.author.bot:
+        return  # Bot自身のメッセージは無視
 
-    # OpenAI にメッセージを送信
-    response = client_openai.chat.completions.create(
+    user_id = message.author.id
+    user_name = message.author.name  # ユーザー名取得
+
+    # 履歴がなければ初期化
+    if user_id not in conversation_history:
+        conversation_history[user_id] = []
+
+    # ユーザーの過去の発言を保存
+    conversation_history[user_id].append({"role": "user", "content": message.content})
+
+    # OpenAI API に送るメッセージリストを作成
+    messages = [{"role": "system", "content": "あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。"}]
+    messages.extend(conversation_history[user_id])
+
+    # OpenAI API を使用して返答を生成
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "あなたはキャラクターのロールプレイをするAIです。"},
-            {"role": "user", "content": message.content}
-        ]
+        messages=messages
     )
 
-    reply = response.choices[0].message.content  # 最新の API に対応
+    reply = response["choices"][0]["message"]["content"]
 
-    # 返信を送信
-    await message.channel.send(reply)
+    # 返答を履歴に保存
+    conversation_history[user_id].append({"role": "assistant", "content": reply})
 
-# Botを起動
-bot.run(DISCORD_TOKEN)
+    # ユーザー名を呼びながら返信
+    reply_with_name = f"{user_name}様、{reply}"
+    await message.channel.send(reply_with_name)
+
+    # 履歴管理タスクをスケジュール
+    asyncio.create_task(manage_history(user_id))
+
+# Botの実行
+bot.run("your_discord_bot_token")
