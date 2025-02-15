@@ -29,7 +29,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # 会話履歴の保存用（ユーザーごとに管理）
 conversation_history = {}
 
-# ギルドごとのキャラクター設定
+# ギルドごとのキャラクター設定（リスト形式で複数の設定を保持）
 character_settings = {}
 
 # 会話履歴の保持時間（秒）
@@ -47,27 +47,55 @@ async def on_ready():
 
 @bot.command()
 async def set_character(ctx, *, setting: str):
-    """ギルド全体のキャラクター設定を変更するコマンド"""
+    """ギルド全体のキャラクター設定を追記するコマンド"""
     guild_id = ctx.guild.id
-    character_settings[guild_id] = setting
-    await ctx.send(f"キャラクター設定を更新しました: {setting}")
+    if guild_id not in character_settings:
+        character_settings[guild_id] = []
+    character_settings[guild_id].append(setting)
+    await ctx.send(f"キャラクター設定を追加しました: {setting}")
 
 @bot.command()
 async def list_character(ctx):
     """現在のギルドのキャラクター設定を一覧表示するコマンド"""
     guild_id = ctx.guild.id
-    setting = character_settings.get(guild_id, "デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。")
-    await ctx.send(f"現在のキャラクター設定: {setting}")
+    settings = character_settings.get(guild_id, ["デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。"])
+    await ctx.send("現在のキャラクター設定:\n" + "\n".join(settings))
 
 @bot.command()
-async def edit_character(ctx, *, new_setting: str):
-    """現在のキャラクター設定を編集するコマンド"""
+async def save_character(ctx):
+    """現在のギルドのキャラクター設定を .txt ファイルに保存するコマンド"""
     guild_id = ctx.guild.id
-    if guild_id in character_settings:
-        character_settings[guild_id] = new_setting
-        await ctx.send(f"キャラクター設定を編集しました: {new_setting}")
-    else:
-        await ctx.send("キャラクター設定がまだ存在しません。まず `!set_character` で設定してください。")
+    settings = character_settings.get(guild_id, ["デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。"])
+    filename = f"character_settings_{guild_id}.txt"
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write("\n".join(settings))
+    await ctx.send(f"キャラクター設定を `{filename}` に保存しました。")
+
+@bot.command()
+async def upload_character(ctx):
+    """ユーザーがアップロードした .txt ファイルをキャラクター設定として上書きするコマンド"""
+    if not ctx.message.attachments:
+        await ctx.send("ファイルが添付されていません。")
+        return
+    
+    attachment = ctx.message.attachments[0]
+    if not attachment.filename.endswith(".txt"):
+        await ctx.send(".txt ファイルをアップロードしてください。")
+        return
+    
+    guild_id = ctx.guild.id
+    content = await attachment.read()
+    settings = content.decode("utf-8").split("\n")
+    character_settings[guild_id] = [setting.strip() for setting in settings if setting.strip()]
+    
+    await ctx.send("キャラクター設定をアップロードしたファイルの内容に更新しました。")
+
+@bot.command()
+async def reset_character(ctx):
+    """キャラクター設定をリセットするコマンド"""
+    guild_id = ctx.guild.id
+    character_settings[guild_id] = []
+    await ctx.send("キャラクター設定をリセットしました。")
 
 @bot.event
 async def on_message(message):
@@ -82,7 +110,7 @@ async def on_message(message):
         return  # メンションされていない場合は無視
     
     user_id = message.author.id
-    user_name = message.author.name  # ユーザー名取得
+    user_name = message.author.display_name  # サーバー内の表示名を取得
     guild_id = message.guild.id if message.guild else None
 
     # 履歴がなければ初期化
@@ -93,8 +121,8 @@ async def on_message(message):
     conversation_history[user_id].append({"role": "user", "content": message.content})
 
     # OpenAI API に送るメッセージリストを作成
-    system_message = character_settings.get(guild_id, "あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。")
-    messages = [{"role": "system", "content": system_message}]
+    system_messages = character_settings.get(guild_id, ["あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。"])
+    messages = [{"role": "system", "content": setting} for setting in system_messages]
     messages.extend(conversation_history[user_id])
 
     # OpenAI API を使用して返答を生成
