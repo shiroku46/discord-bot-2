@@ -29,6 +29,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # 会話履歴の保存用（ユーザーごとに管理）
 conversation_history = {}
 
+# ギルドごとのキャラクター設定
+character_settings = {}
+
 # 会話履歴の保持時間（秒）
 HISTORY_EXPIRATION = 300  # 5分間
 
@@ -42,17 +45,28 @@ async def manage_history(user_id):
 async def on_ready():
     print(f"✅ ログインしました: {bot.user}")
 
+@bot.command()
+async def set_character(ctx, *, setting: str):
+    """ギルド全体のキャラクター設定を変更するコマンド"""
+    guild_id = ctx.guild.id
+    character_settings[guild_id] = setting
+    await ctx.send(f"キャラクター設定を更新しました: {setting}")
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return  # Bot自身のメッセージは無視
-
-    # Botがメンションされていない場合は無視
+    
+    # コマンド処理を優先
+    if await bot.process_commands(message):
+        return  # コマンドが処理された場合は、通常のメッセージ処理をスキップ
+    
     if bot.user not in message.mentions:
-        return
-
+        return  # メンションされていない場合は無視
+    
     user_id = message.author.id
     user_name = message.author.name  # ユーザー名取得
+    guild_id = message.guild.id if message.guild else None
 
     # 履歴がなければ初期化
     if user_id not in conversation_history:
@@ -62,10 +76,11 @@ async def on_message(message):
     conversation_history[user_id].append({"role": "user", "content": message.content})
 
     # OpenAI API に送るメッセージリストを作成
-    messages = [{"role": "system", "content": "あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。"}]
+    system_message = character_settings.get(guild_id, "あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。")
+    messages = [{"role": "system", "content": system_message}]
     messages.extend(conversation_history[user_id])
 
-    # OpenAI API を使用して返答を生成（最新の書き方に対応）
+    # OpenAI API を使用して返答を生成
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
