@@ -47,6 +47,10 @@ async def on_message(message):
     if message.author.bot:
         return  # Bot自身のメッセージは無視
 
+    # Botがメンションされていない場合は無視
+    if bot.user not in message.mentions:
+        return
+
     user_id = message.author.id
     user_name = message.author.name  # ユーザー名取得
 
@@ -63,14 +67,12 @@ async def on_message(message):
 
     # OpenAI API を使用して返答を生成（最新の書き方に対応）
     try:
-        client = openai.OpenAI()  # OpenAIクライアントを作成
-
-        response = client.chat.completions.create(
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages
         )
 
-        reply = response.choices[0].message.content  # 修正ポイント！
+        reply = response.choices[0].message.content
 
         # 返答を履歴に保存
         conversation_history[user_id].append({"role": "assistant", "content": reply})
