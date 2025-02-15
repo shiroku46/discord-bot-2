@@ -63,12 +63,14 @@ async def on_message(message):
 
     # OpenAI API を使用して返答を生成（最新の書き方に対応）
     try:
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI()  # OpenAIクライアントを作成
+
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages
         )
 
-        reply = response["choices"][0]["message"]["content"]
+        reply = response.choices[0].message.content  # 修正ポイント！
 
         # 返答を履歴に保存
         conversation_history[user_id].append({"role": "assistant", "content": reply})
