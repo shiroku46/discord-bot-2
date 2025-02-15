@@ -12,12 +12,15 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 discord_token = os.getenv("DISCORD_TOKEN")
 
+OPENAI_KEY_ERROR = "❌ エラー: OPENAI_API_KEY が設定されていません。環境変数を確認してください。"
+DISCORD_TOKEN_ERROR = "❌ エラー: DISCORD_TOKEN が設定されていません。環境変数を確認してください。"
+
 if not openai.api_key:
-    print("❌ エラー: OPENAI_API_KEY が設定されていません。環境変数を確認してください。")
+    print(OPENAI_KEY_ERROR)
     exit(1)
 
 if not discord_token:
-    print("❌ エラー: DISCORD_TOKEN が設定されていません。環境変数を確認してください。")
+    print(DISCORD_TOKEN_ERROR)
     exit(1)
 
 # Botの設定
@@ -35,6 +38,11 @@ character_settings = {}
 # 会話履歴の保持時間（秒）
 HISTORY_EXPIRATION = 300  # 5分間
 
+DEFAULT_SYSTEM_MESSAGE = "あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。"
+ERROR_MESSAGE = "申し訳ありませんが、現在応答できません。"
+CHARACTER_UPDATE_MESSAGE = "キャラクター設定を更新しました: {}"
+LOGIN_MESSAGE = "✅ ログインしました: {}"
+
 async def manage_history(user_id):
     """一定時間後に会話履歴を削除"""
     await asyncio.sleep(HISTORY_EXPIRATION)
@@ -43,65 +51,70 @@ async def manage_history(user_id):
 
 @bot.event
 async def on_ready():
-    print(f"✅ ログインしました: {bot.user}")
+    print(LOGIN_MESSAGE.format(bot.user))
 
 @bot.command()
 async def set_character(ctx, *, setting: str):
     """ギルド全体のキャラクター設定を変更するコマンド"""
     guild_id = ctx.guild.id
     character_settings[guild_id] = setting
-    await ctx.send(f"キャラクター設定を更新しました: {setting}")
+    await ctx.send(CHARACTER_UPDATE_MESSAGE.format(setting))
 
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return  # Bot自身のメッセージは無視
-    
-    # コマンド処理を優先
-    if await bot.process_commands(message):
-        return  # コマンドが処理された場合は、通常のメッセージ処理をスキップ
-    
-    if bot.user not in message.mentions:
-        return  # メンションされていない場合は無視
-    
-    user_id = message.author.id
-    user_name = message.author.name  # ユーザー名取得
-    guild_id = message.guild.id if message.guild else None
-
-    # 履歴がなければ初期化
-    if user_id not in conversation_history:
-        conversation_history[user_id] = []
-
-    # ユーザーの過去の発言を保存
-    conversation_history[user_id].append({"role": "user", "content": message.content})
-
-    # OpenAI API に送るメッセージリストを作成
-    system_message = character_settings.get(guild_id, "あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。")
-    messages = [{"role": "system", "content": system_message}]
-    messages.extend(conversation_history[user_id])
-
-    # OpenAI API を使用して返答を生成
+async def get_openai_response(messages):
+    """OpenAI APIを呼び出して返答を取得する関数"""
     try:
-        response = openai.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages
         )
-
-        reply = response.choices[0].message.content
-
-        # 返答を履歴に保存
-        conversation_history[user_id].append({"role": "assistant", "content": reply})
-
-        # ユーザー名を呼びながら返信
-        reply_with_name = f"{user_name}様、{reply}"
-        await message.channel.send(reply_with_name)
-
-        # 履歴管理タスクをスケジュール
-        asyncio.create_task(manage_history(user_id))
-
+        return response.choices[0].message.content
     except Exception as e:
         print(f"🚨 OpenAI APIエラー: {e}")
-        await message.channel.send("申し訳ありませんが、現在応答できません。")
+        return None
+
+@bot.event
+async def on_message(message):
+  if message.author.bot:
+    return  # ボット自身のメッセージは無視
+  
+  # コマンド処理を優先
+  if await bot.process_commands(message):
+    return  # コマンドが処理された場合は、通常のメッセージ処理をスキップ
+  
+  if bot.user not in message.mentions:
+    return  # メンションされていない場合は無視
+  
+  user_id = message.author.id
+  user_name = message.author.name  # ユーザー名取得
+  guild_id = message.guild.id if message.guild else None
+
+  # 履歴がなければ初期化
+  if user_id not in conversation_history:
+    conversation_history[user_id] = []
+
+  # ユーザーの過去の発言を保存
+  conversation_history[user_id].append({"role": "user", "content": message.content})
+
+  # OpenAI API に送るメッセージリストを作成
+  system_message = character_settings.get(guild_id, DEFAULT_SYSTEM_MESSAGE)
+  messages = [{"role": "system", "content": system_message}]
+  messages.extend(conversation_history[user_id])
+  
+  # OpenAI API を使用して返答を生成
+  reply = await get_openai_response(messages)
+  if reply is None:
+    await message.channel.send(ERROR_MESSAGE)
+    return
+
+  # 返答を履歴に保存
+  conversation_history[user_id].append({"role": "assistant", "content": reply})
+
+  # ユーザー名を呼びながら返信
+  reply_with_name = f"{user_name}様、{reply}"
+  await message.channel.send(reply_with_name)
+
+  # 履歴管理タスクをスケジュール
+  asyncio.create_task(manage_history(user_id))
 
 # Botの実行
 bot.run(discord_token)
