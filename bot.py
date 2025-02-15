@@ -24,7 +24,7 @@ if not discord_token:
 intents = discord.Intents.default()
 intents.message_content = True  # メッセージの内容を取得できるようにする
 
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # 会話履歴の保存用（ユーザーごとに管理）
 conversation_history = {}
@@ -51,6 +51,23 @@ async def set_character(ctx, *, setting: str):
     guild_id = ctx.guild.id
     character_settings[guild_id] = setting
     await ctx.send(f"キャラクター設定を更新しました: {setting}")
+
+@bot.command()
+async def list_character(ctx):
+    """現在のギルドのキャラクター設定を一覧表示するコマンド"""
+    guild_id = ctx.guild.id
+    setting = character_settings.get(guild_id, "デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。")
+    await ctx.send(f"現在のキャラクター設定: {setting}")
+
+@bot.command()
+async def edit_character(ctx, *, new_setting: str):
+    """現在のキャラクター設定を編集するコマンド"""
+    guild_id = ctx.guild.id
+    if guild_id in character_settings:
+        character_settings[guild_id] = new_setting
+        await ctx.send(f"キャラクター設定を編集しました: {new_setting}")
+    else:
+        await ctx.send("キャラクター設定がまだ存在しません。まず `!set_character` で設定してください。")
 
 @bot.event
 async def on_message(message):
