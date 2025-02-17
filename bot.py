@@ -2,7 +2,9 @@ import discord
 import openai
 import asyncio
 import os
+import random
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 
 # .env ファイルの読み込み
@@ -22,131 +24,99 @@ if not discord_token:
 
 # Botの設定
 intents = discord.Intents.default()
-intents.message_content = True  # メッセージの内容を取得できるようにする
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 会話履歴の保存用（ユーザーごとに管理）
+# 会話履歴の保存用
 conversation_history = {}
-
-# ギルドごとのキャラクター設定（リスト形式で複数の設定を保持）
 character_settings = {}
-
-# 会話履歴の保持時間（秒）
-HISTORY_EXPIRATION = 300  # 5分間
+HISTORY_EXPIRATION = 300
 
 async def manage_history(user_id):
-    """一定時間後に会話履歴を削除"""
     await asyncio.sleep(HISTORY_EXPIRATION)
     if user_id in conversation_history:
         del conversation_history[user_id]
 
 @bot.event
 async def on_ready():
+    await bot.tree.sync()
     print(f"✅ ログインしました: {bot.user}")
 
-@bot.command()
-async def set_character(ctx, *, setting: str):
-    """ギルド全体のキャラクター設定を追記するコマンド"""
-    guild_id = ctx.guild.id
+@bot.tree.command(name="set_character", description="キャラクター設定を追加")
+async def set_character(interaction: discord.Interaction, setting: str):
+    guild_id = interaction.guild.id
     if guild_id not in character_settings:
         character_settings[guild_id] = []
     character_settings[guild_id].append(setting)
-    await ctx.send(f"キャラクター設定を追加しました: {setting}")
+    await interaction.response.send_message(f"キャラクター設定を追加しました: {setting}")
 
-@bot.command()
-async def list_character(ctx):
-    """現在のギルドのキャラクター設定を一覧表示するコマンド"""
-    guild_id = ctx.guild.id
+@bot.tree.command(name="list_character", description="キャラクター設定の一覧を表示")
+async def list_character(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
     settings = character_settings.get(guild_id, ["デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。"])
-    await ctx.send("現在のキャラクター設定:\n" + "\n".join(settings))
+    await interaction.response.send_message("現在のキャラクター設定:\n" + "\n".join(settings))
 
-@bot.command()
-async def save_character(ctx):
-    """現在のギルドのキャラクター設定を .txt ファイルに保存するコマンド"""
-    guild_id = ctx.guild.id
-    settings = character_settings.get(guild_id, ["デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。"])
-    filename = f"character_settings_{guild_id}.txt"
-    with open(filename, "w", encoding="utf-8") as file:
-        file.write("\n".join(settings))
-    await ctx.send(f"キャラクター設定を `{filename}` に保存しました。")
-
-@bot.command()
-async def upload_character(ctx):
-    """ユーザーがアップロードした .txt ファイルをキャラクター設定として上書きするコマンド"""
-    if not ctx.message.attachments:
-        await ctx.send("ファイルが添付されていません。")
-        return
-    
-    attachment = ctx.message.attachments[0]
-    if not attachment.filename.endswith(".txt"):
-        await ctx.send(".txt ファイルをアップロードしてください。")
-        return
-    
-    guild_id = ctx.guild.id
-    content = await attachment.read()
-    settings = content.decode("utf-8").split("\n")
-    character_settings[guild_id] = [setting.strip() for setting in settings if setting.strip()]
-    
-    await ctx.send("キャラクター設定をアップロードしたファイルの内容に更新しました。")
-
-@bot.command()
-async def reset_character(ctx):
-    """キャラクター設定をリセットするコマンド"""
-    guild_id = ctx.guild.id
+@bot.tree.command(name="reset_character", description="キャラクター設定をリセット")
+async def reset_character(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
     character_settings[guild_id] = []
-    await ctx.send("キャラクター設定をリセットしました。")
+    await interaction.response.send_message("キャラクター設定をリセットしました。")
+
+@bot.tree.command(name="upload_character", description="キャラクター設定を.txtファイルから上書き")
+async def upload_character(interaction: discord.Interaction, file: discord.Attachment):
+    guild_id = interaction.guild.id
+    if not file.filename.endswith(".txt"):
+        await interaction.response.send_message("❌ エラー: .txt ファイルをアップロードしてください。")
+        return
+    
+    content = await file.read()
+    character_settings[guild_id] = content.decode("utf-8").splitlines()
+    await interaction.response.send_message("✅ キャラクター設定を更新しました。")
+
+@bot.tree.command(name="help", description="利用可能なコマンドの一覧を表示")
+async def help_command(interaction: discord.Interaction):
+    help_text = (
+        "利用可能なコマンド一覧:\n"
+        "/set_character [設定] - キャラクター設定を追加\n"
+        "/list_character - キャラクター設定の一覧を表示\n"
+        "/reset_character - キャラクター設定をリセット\n"
+        "/upload_character [ファイル] - .txtファイルからキャラクター設定を更新\n"
+    )
+    await interaction.response.send_message(help_text)
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
-        return  # Bot自身のメッセージは無視
-    
-    # コマンド処理を優先
-    if await bot.process_commands(message):
-        return  # コマンドが処理された場合は、通常のメッセージ処理をスキップ
-    
+        return  
     if bot.user not in message.mentions:
-        return  # メンションされていない場合は無視
-    
+        return  
     user_id = message.author.id
-    user_name = message.author.display_name  # サーバー内の表示名を取得
+    user_name = f"{message.author.display_name}様"
     guild_id = message.guild.id if message.guild else None
-
-    # 履歴がなければ初期化
     if user_id not in conversation_history:
         conversation_history[user_id] = []
-
-    # ユーザーの過去の発言を保存
     conversation_history[user_id].append({"role": "user", "content": message.content})
-
-    # OpenAI API に送るメッセージリストを作成
     system_messages = character_settings.get(guild_id, ["あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。"])
     messages = [{"role": "system", "content": setting} for setting in system_messages]
     messages.extend(conversation_history[user_id])
-
-    # OpenAI API を使用して返答を生成
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages
         )
-
         reply = response.choices[0].message.content
-
-        # 返答を履歴に保存
         conversation_history[user_id].append({"role": "assistant", "content": reply})
-
-        # ユーザー名を呼びながら返信
-        reply_with_name = f"{user_name}様、{reply}"
+        patterns = [
+            f"{user_name}、{reply}",  # 最初にユーザー名
+            f"{reply} {user_name}。",  # 最後にユーザー名
+            f"{reply}"  # 名前を入れない
+        ]
+        reply_with_name = random.choice(patterns)
         await message.channel.send(reply_with_name)
-
-        # 履歴管理タスクをスケジュール
         asyncio.create_task(manage_history(user_id))
-
     except Exception as e:
         print(f"🚨 OpenAI APIエラー: {e}")
         await message.channel.send("申し訳ありませんが、現在応答できません。")
 
-# Botの実行
 bot.run(discord_token)
