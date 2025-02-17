@@ -97,12 +97,12 @@ async def on_message(message):
     if bot.user not in message.mentions:
         return  
     user_id = message.author.id
-    user_name = f"{message.author.display_name}"
+    user_name = f"{message.author.display_name}様"
     guild_id = message.guild.id if message.guild else None
     if user_id not in conversation_history:
         conversation_history[user_id] = []
     conversation_history[user_id].append({"role": "user", "content": message.content})
-    system_messages = character_settings.get(guild_id, ["あなたは『仁井垣巳乙』です。『桝見荘』の管理人をしています。あなたは今後、仁井垣巳乙という幼い人物としてロールプレイをしつつ、フランクな口調で話をしてください。"])
+    system_messages = character_settings.get(guild_id, ["あなたは『仁井垣巳乙』です。『桝見荘』の管理人をしています。あなたは今後、仁井垣巳乙という幼い女の子としてロールプレイをしつつ、ややきつめの口調で話をしてください。"])
     messages = [{"role": "system", "content": setting} for setting in system_messages]
     messages.extend(conversation_history[user_id])
     try:
@@ -111,6 +111,7 @@ async def on_message(message):
             messages=messages,
         )
         reply = response.choices[0].message.content.replace("**", "")  # 太字の解除
+        reply = reply.replace(user_name, "").strip()  # 名前の重複防止
         conversation_history[user_id].append({"role": "assistant", "content": reply})
         patterns = [
             f"{user_name}、{reply}",  # 最初にユーザー名
