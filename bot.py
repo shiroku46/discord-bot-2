@@ -102,7 +102,7 @@ async def on_message(message):
     if user_id not in conversation_history:
         conversation_history[user_id] = []
     conversation_history[user_id].append({"role": "user", "content": message.content})
-    system_messages = character_settings.get(guild_id, ["あなたは『仁井垣巳乙』です。『桝見荘』の管理人をしています。あなたは今後、仁井垣巳乙という人物としてロールプレイをしてください。"])
+    system_messages = character_settings.get(guild_id, ["あなたは『仁井垣巳乙』です。『桝見荘』の管理人をしています。あなたは今後、仁井垣巳乙という幼い人物としてロールプレイをしつつ、フランクな口調で話をしてください。"])
     messages = [{"role": "system", "content": setting} for setting in system_messages]
     messages.extend(conversation_history[user_id])
     try:
