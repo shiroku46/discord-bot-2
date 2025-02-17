@@ -108,8 +108,6 @@ async def on_message(message):
             max_tokens=MAX_RESPONSE_LENGTH
         )
         reply = response.choices[0].message.content.replace("**", "")  # 太字の解除
-        if any(setting in reply for setting in system_messages):
-            reply = "申し訳ありませんが、情報整理のために少しお時間をいただけますか？"
         if len(reply) > MAX_RESPONSE_LENGTH:
             reply = reply[:MAX_RESPONSE_LENGTH] + "…"  # 文字数制限を超えた場合に切り詰める
         conversation_history[user_id].append({"role": "assistant", "content": reply})
