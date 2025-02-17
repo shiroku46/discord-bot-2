@@ -54,7 +54,7 @@ async def set_character(interaction: discord.Interaction, setting: str):
 @bot.tree.command(name="list_character", description="キャラクター設定の一覧を表示")
 async def list_character(interaction: discord.Interaction):
     guild_id = interaction.guild.id
-    settings = character_settings.get(guild_id, ["デフォルト設定: 『サイカワ』です。『桝見荘』の管理人代行をしています。"])
+    settings = character_settings.get(guild_id, ["デフォルト設定: 『仁井垣巳乙』です。『桝見荘』の管理人をしています。"])
     await interaction.response.send_message("現在のキャラクター設定:\n" + "\n".join(settings))
 
 @bot.tree.command(name="reset_character", description="キャラクター設定をリセット")
@@ -92,12 +92,12 @@ async def on_message(message):
     if bot.user not in message.mentions:
         return  
     user_id = message.author.id
-    user_name = f"{message.author.display_name}様"
+    user_name = f"{message.author.display_name}"
     guild_id = message.guild.id if message.guild else None
     if user_id not in conversation_history:
         conversation_history[user_id] = []
     conversation_history[user_id].append({"role": "user", "content": message.content})
-    system_messages = character_settings.get(guild_id, ["あなたは『サイカワ』です。『桝見荘』の管理人代行をしています。あなた自身がサイカワであることを自認し、他人のことだとは思わないようにしてください。"])
+    system_messages = character_settings.get(guild_id, ["あなたは『仁井垣巳乙』です。『桝見荘』の管理人をしています。あなたは今後、仁井垣巳乙という人物としてロールプレイをしてください。"])
     messages = [{"role": "system", "content": setting} for setting in system_messages]
     messages.extend(conversation_history[user_id])
     try:
@@ -118,6 +118,6 @@ async def on_message(message):
         asyncio.create_task(manage_history(user_id))
     except Exception as e:
         print(f"🚨 OpenAI APIエラー: {e}")
-        await message.channel.send("申し訳ありませんが、現在応答できません。")
+        await message.channel.send("💤")
 
 bot.run(discord_token)
