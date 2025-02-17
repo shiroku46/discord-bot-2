@@ -97,7 +97,7 @@ async def on_message(message):
     if bot.user not in message.mentions:
         return  
     user_id = message.author.id
-    user_name = f"{message.author.display_name}様"
+    user_name = f"{message.author.display_name}"
     guild_id = message.guild.id if message.guild else None
     if user_id not in conversation_history:
         conversation_history[user_id] = []
