@@ -32,7 +32,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 conversation_history = {}
 character_settings = {}
 HISTORY_EXPIRATION = 300
-MAX_RESPONSE_LENGTH = 100  # 文字数の上限
 
 async def manage_history(user_id):
     await asyncio.sleep(HISTORY_EXPIRATION)
@@ -105,7 +104,7 @@ async def on_message(message):
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            max_tokens=MAX_RESPONSE_LENGTH
+            
         )
         reply = response.choices[0].message.content.replace("**", "")  # 太字の解除
         conversation_history[user_id].append({"role": "assistant", "content": reply})
