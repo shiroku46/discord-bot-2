@@ -40,8 +40,13 @@ async def manage_history(user_id):
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
-    print(f"✅ ログインしました: {bot.user}")
+    try:
+        if not hasattr(bot, "synced"):
+            await bot.tree.sync()
+            bot.synced = True
+        print(f"✅ ログインしました: {bot.user}")
+    except discord.HTTPException as e:
+        print(f"⚠ コマンド同期失敗: {e}")
 
 @bot.tree.command(name="set_character", description="キャラクター設定を追加")
 async def set_character(interaction: discord.Interaction, setting: str):
@@ -104,7 +109,6 @@ async def on_message(message):
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            
         )
         reply = response.choices[0].message.content.replace("**", "")  # 太字の解除
         conversation_history[user_id].append({"role": "assistant", "content": reply})
@@ -116,8 +120,9 @@ async def on_message(message):
         reply_with_name = random.choice(patterns)
         await message.channel.send(reply_with_name)
         asyncio.create_task(manage_history(user_id))
-    except Exception as e:
+    except openai.OpenAIError as e:
         print(f"🚨 OpenAI APIエラー: {e}")
         await message.channel.send("💤")
+        await asyncio.sleep(5)  # 5秒後に再試行
 
 bot.run(discord_token)
